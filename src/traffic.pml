@@ -1,15 +1,10 @@
 // FM Project, Andrey Volkov, Construction 12
 
-// Lanes:
-// 0-2: E
-// 3-5: S
-// 6-8: W
-// 9-11: N
-// 12: P (pedestrian crossing)
 #define LANES_NUM 6
 #define LAST_CAR_LANE 4
 
 int state = 0;
+// convert binary to decimal
 int rules[LANES_NUM] =
 {
     31, // 0: 011111
@@ -24,13 +19,9 @@ int rules[LANES_NUM] =
 int lanes_nums[LANES_NUM] = { 0, 1, 2, 3, 4, 5 }
 
 mtype:light = { RED, GREEN }
-mtype:light lights_color[LANES_NUM] =
-{
-    RED, RED, RED, RED, RED, RED, RED,
-    RED, RED, RED, RED, RED, RED
-}
+mtype:light lights_color[LANES_NUM] = { RED, RED, RED, RED, RED, RED }
 
-mtype:actor = { CAR, PED }
+mtype:actor = { CAR, PEDESTRIAN }
 // Channels for generating traffic actors
 // Lanes 0-11 for cars,
 // Lane 12 for pedestrians
@@ -50,7 +41,7 @@ proctype car_spawner (int lane) {
 proctype pedestrian_spawner (int lane) {
     assert(lane > LAST_CAR_LANE && lane <= LANES_NUM);
     do
-    :: lanes[lane]!PED;
+    :: lanes[lane]!PEDESTRIAN;
     od;
 }
 
@@ -63,10 +54,10 @@ proctype traffic_light (int lane) {
         do
         ::  control_send[lane]?control_token;
             assert(control_token == lane);
-            //printf("Lane %d checks state: %d against condition %d\n", lane, state, rules[lane]);
+            printf("Lane %d checks state: %d against condition %d\n", lane, state, rules[lane]);
             if
             ::  ((state & rules[lane]) == 0) ->
-                //printf("Lane %d will change state to %d\n", lane, state | 1 << lane);
+                printf("Lane %d will change state to %d\n", lane, state | 1 << lane);
                 state = state ^ 1 << lane;
                 lights_color[lane] = GREEN;
                 printf("Lane %d is good to go\n", lane);
@@ -85,26 +76,11 @@ proctype traffic_light (int lane) {
         lanes[lane]?traffic_actor;
         printf("Lane %d: passes a car/ped\n", lane);
 
-        // lanes[lane]?num_cars;
-        // do
-        // ::  num_cars > 0 ->
-        //     num_cars--;
-        //     printf("Lane %d: passes a car/ped\n", lane);
-        // ::  else -> break;
-        // od;
-
-        // do
-        // ::  lanes[lane]?[traffic_actor] ->
-        //     lanes[lane]?traffic_actor;
-        //     printf("Lane %d: passes a car/ped\n", lane);
-        // ::  else -> break;
-        // od;
-
         /// Turn off
         control_send[lane]?control_token;
         assert(control_token == lane);
         lights_color[lane] = RED;
-        //printf("Lane %d will change state to %d\n", lane, state & !(1 << lane));
+        printf("Lane %d will change state to %d\n", lane, state & !(1 << lane));
         state = state ^ 1 << lane;
         printf("Lane %d: stopped\n", lane);
         control_return[lane]!lane;
@@ -153,22 +129,20 @@ init {
 
 // Lanes: { 1, 5, 7, 10, 11, 12 }
 mtype:actor dummy_actor;
-#define sense(n) (lanes[n]?[dummy_actor])
 #define allowed(n) (lights_color[n] == GREEN)
 
-#define fair(n) ([]<> !(sense(n) && allowed(n)))
-#define unfair(n) (<>[] (sense(n) && allowed(n)))
-ltl fairness { fair(1) && fair(5) && fair(7) && fair(10) && fair(11) && fair(12) };
+ltl safety {[]!(
+    allowed(1) && (allowed(4) || allowed(3)) ||
+    allowed(5) && (allowed(4) || allowed(3)) || 
+    allowed(5) && allowed(0) ||
+    allowed(0) && (allowed(1) || allowed(2) || allowed(3) || allowed(4) || allowed(5)) || 
+    (allowed(0) || allowed(4) || allowed(3)) && (allowed(1) || allowed(5))    
+) };
 
-ltl safety {[]!(allowed(1) && (allowed(10) || allowed(11)) ||
-                allowed(5) && (allowed(7) || allowed(10)) ||
-                allowed(7) && allowed(10) ||
-                allowed(12) && (allowed(1) || allowed(7) || allowed(11))) };
+#define sense(n) (lanes[n]?[dummy_actor])
+#define fair(n) ([]<> !(sense(n) && allowed(n)))
+
+ltl fairness { fair(0) && fair(1) && fair(2) && fair(3) && fair(4) && fair(5) };
 
 #define liv(n) ([] ((sense(n) && !allowed(n)) -> <> allowed(n)))
-ltl liveness { liv(1) && liv(5) && liv(7) && liv(10) && liv(11) && liv(12) };
-
-// ltl flive { (fair(1) && fair(5) && fair(7) && fair(10) && fair(11) && fair(12)) ->
-//             (liv(1) && liv(5) && liv(7) && liv(10) && liv(11) && liv(12)) };
-
-// ltl flive1 { (fair(1)) -> (liv(1)) };
+ltl liveness { liv(0) && liv(1) && liv(2) && liv(3) && liv(4) && liv(5) };
