@@ -1,4 +1,4 @@
-// Group 2: D. Maximenko, M. Shmakov, A. Mohenu
+// FM Project, Andrey Volkov, Construction 12
 
 // Lanes:
 // 0-2: E
@@ -6,35 +6,25 @@
 // 6-8: W
 // 9-11: N
 // 12: P (pedestrian crossing)
-#define NUM_LANES_TOTAL 13
-#define LAST_CAR_LANE 11
+#define LANES_NUM 6
+#define LAST_CAR_LANE 4
 
 int state = 0;
-// Ah, if only Promela had binary literals...
-int conditions[NUM_LANES_TOTAL] =
+int rules[LANES_NUM] =
 {
-    4096, // Lane  0: 1 000 000 000 000, intersects 12
-    7440, // Lane  1: 1 110 100 010 000, intersects 4, 8, 10, 11, 12
-    6320, // Lane  2: 1 100 010 110 000, intersects 4, 5, 7, 11, 12
-    4096, // Lane  3: 1 000 000 000 000, intersects 12
-    2182, // Lane  4: 0 000 000 000 110, intersects 1, 2, 7, 11
-    1412, // Lane  5: 0 010 110 000 100, intersects 2, 7, 8, 10
-    0,    // Lane  6: 0 000 000 000 000, no intersections
-    5172, // Lane  7: 1 010 000 110 100, intersects 2, 4, 5, 10, 12
-    3106, // Lane  8: 0 110 000 100 010, intersects 1, 5, 10, 11
-    0,    // Lane  9: 0 000 000 000 000, no intersections
-    418,  // Lane 10: 0 000 110 100 010, intersects 1, 5, 7, 8
-    4374, // Lane 11: 1 000 100 010 110, intersects 1, 2, 4, 8, 12
-    2191  // Lane 12: 0 100 010 001 111, intersects 0, 1, 2, 3, 7, 11
+    31, // 0: 011111
+    38, // 1: 100110						
+    36, // 2: 100100
+    57, // 3: 111001
+    49, // 4: 110001
+    38  // 5: 100110 (crosswalk)
 }
 
-// Number of lanes in subconfiguration
-#define NUM_LANES_SIMULATED 6
-// Array that defines this subconfiguration
-int lanes_nums[NUM_LANES_SIMULATED] = { 1, 5, 7, 10, 11, 12 }
+// Array that defines the number of lanes
+int lanes_nums[LANES_NUM] = { 0, 1, 2, 3, 4, 5 }
 
 mtype:light = { RED, GREEN }
-mtype:light lights_color[NUM_LANES_TOTAL] =
+mtype:light lights_color[LANES_NUM] =
 {
     RED, RED, RED, RED, RED, RED, RED,
     RED, RED, RED, RED, RED, RED
@@ -44,11 +34,11 @@ mtype:actor = { CAR, PED }
 // Channels for generating traffic actors
 // Lanes 0-11 for cars,
 // Lane 12 for pedestrians
-chan lanes[NUM_LANES_TOTAL] = [1] of { mtype:actor }
+chan lanes[LANES_NUM] = [1] of { mtype:actor }
 
 // Control synchronization channels
-chan control_send[NUM_LANES_TOTAL] = [0] of { int }
-chan control_return[NUM_LANES_TOTAL] = [0] of { int }
+chan control_send[LANES_NUM] = [0] of { int }
+chan control_return[LANES_NUM] = [0] of { int }
 
 proctype car_spawner (int lane) {
     assert(lane <= LAST_CAR_LANE);
@@ -58,7 +48,7 @@ proctype car_spawner (int lane) {
 }
 
 proctype pedestrian_spawner (int lane) {
-    assert(lane > LAST_CAR_LANE && lane <= NUM_LANES_TOTAL);
+    assert(lane > LAST_CAR_LANE && lane <= LANES_NUM);
     do
     :: lanes[lane]!PED;
     od;
@@ -73,9 +63,9 @@ proctype traffic_light (int lane) {
         do
         ::  control_send[lane]?control_token;
             assert(control_token == lane);
-            //printf("Lane %d checks state: %d against condition %d\n", lane, state, conditions[lane]);
+            //printf("Lane %d checks state: %d against condition %d\n", lane, state, rules[lane]);
             if
-            ::  ((state & conditions[lane]) == 0) ->
+            ::  ((state & rules[lane]) == 0) ->
                 //printf("Lane %d will change state to %d\n", lane, state | 1 << lane);
                 state = state ^ 1 << lane;
                 lights_color[lane] = GREEN;
@@ -131,7 +121,7 @@ proctype intersection_controller () {
         control_send[next_lane]!next_lane;
         control_return[next_lane]?control_token;
         assert(control_token == next_lane)
-        next_lane_idx = (next_lane_idx + 1) % NUM_LANES_SIMULATED;
+        next_lane_idx = (next_lane_idx + 1) % LANES_NUM;
     od;
 }
 
@@ -142,7 +132,7 @@ init {
     int new_lane_idx = 0;
     int new_lane = 0;
     do
-    ::  new_lane_idx < NUM_LANES_SIMULATED ->
+    ::  new_lane_idx < LANES_NUM ->
         new_lane = lanes_nums[new_lane_idx];
         if
         ::  new_lane <= LAST_CAR_LANE ->
