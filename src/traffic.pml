@@ -1,5 +1,3 @@
-// FM Project, Andrey Volkov, Construction 12
-
 #define LANES_NUM 6
 #define LAST_CAR_LANE 4
 
@@ -15,31 +13,27 @@ int rules[LANES_NUM] =
     38  // 5: 100110 (crosswalk)
 }
 
-// Array that defines the number of lanes
+// array that defines the number of lanes
 int lanes_nums[LANES_NUM] = { 0, 1, 2, 3, 4, 5 }
 
 mtype:light = { RED, GREEN }
 mtype:light lights_color[LANES_NUM] = { RED, RED, RED, RED, RED, RED }
 
 mtype:actor = { CAR, PEDESTRIAN }
-// Channels for generating traffic actors
-// Lanes 0-11 for cars,
-// Lane 12 for pedestrians
+// channels for generating traffic actors (0-4 - cars, 5 - pedestrian)
 chan lanes[LANES_NUM] = [1] of { mtype:actor }
 
-// Control synchronization channels
+// synchronization channels controls
 chan control_send[LANES_NUM] = [0] of { int }
 chan control_return[LANES_NUM] = [0] of { int }
 
 proctype car_spawner (int lane) {
-    assert(lane <= LAST_CAR_LANE);
     do
     :: lanes[lane]!CAR;
     od;
 }
 
 proctype pedestrian_spawner (int lane) {
-    assert(lane > LAST_CAR_LANE && lane <= LANES_NUM);
     do
     :: lanes[lane]!PEDESTRIAN;
     od;
@@ -49,40 +43,40 @@ proctype traffic_light (int lane) {
     int control_token;
     mtype:actor traffic_actor;
     do
-    /// Wait until can turn on
+    /// Wait until can turn on (wait for a car)
     ::  lanes[lane]?[traffic_actor];
         do
-        ::  control_send[lane]?control_token;
+        ::  control_send[lane]?control_token; // wait for a control token
             assert(control_token == lane);
-            printf("Lane %d checks state: %d against condition %d\n", lane, state, rules[lane]);
+            //printf("Lane %d checks state: %d against condition %d\n", lane, state, rules[lane]);
             if
-            ::  ((state & rules[lane]) == 0) ->
-                printf("Lane %d will change state to %d\n", lane, state | 1 << lane);
+            ::  ((state & rules[lane]) == 0) -> // check intersection state (one bitwise operation), if possible then
+                //printf("Lane %d will change state to %d\n", lane, state | 1 << lane);
                 state = state ^ 1 << lane;
                 lights_color[lane] = GREEN;
-                printf("Lane %d is good to go\n", lane);
+                //printf("Lane %d is good to go\n", lane);
             ::  else -> skip;
             fi;
-            control_return[lane]!lane;
+            control_return[lane]!lane; // return the control token
             if
-            ::  lights_color[lane] == GREEN -> break;
+            ::  lights_color[lane] == GREEN -> break; // if traffic light is not green, then break
             ::  else ->
-                printf("Lane %d: could not turn GREEN\n", lane);
+                //printf("Lane %d: could not turn GREEN\n", lane);
                 skip;
             fi;
         od;
 
-        /// Light is green, let cars pass
+        // if the light is green, let cars to pass
         lanes[lane]?traffic_actor;
-        printf("Lane %d: passes a car/ped\n", lane);
+        //printf("Lane %d: passes a car or pedestrian\n", lane);
 
-        /// Turn off
+        // turn off
         control_send[lane]?control_token;
         assert(control_token == lane);
         lights_color[lane] = RED;
-        printf("Lane %d will change state to %d\n", lane, state & !(1 << lane));
+        //printf("Lane %d will change state to %d\n", lane, state & !(1 << lane));
         state = state ^ 1 << lane;
-        printf("Lane %d: stopped\n", lane);
+        //printf("Lane %d: stopped\n", lane);
         control_return[lane]!lane;
     od;
 }
@@ -103,7 +97,7 @@ proctype intersection_controller () {
 
 init {
     run intersection_controller();
-    printf("Controller spawned\n");
+    //printf("Controller spawned\n");
 
     int new_lane_idx = 0;
     int new_lane = 0;
@@ -124,10 +118,9 @@ init {
     ::  else ->
         break;
     od;
-    printf("All processes started\n");
+    //printf("All processes started\n");
 }
 
-// Lanes: { 1, 5, 7, 10, 11, 12 }
 mtype:actor dummy_actor;
 #define allowed(n) (lights_color[n] == GREEN)
 
@@ -144,5 +137,5 @@ ltl safety {[]!(
 
 ltl fairness { fair(0) && fair(1) && fair(2) && fair(3) && fair(4) && fair(5) };
 
-#define liv(n) ([] ((sense(n) && !allowed(n)) -> <> allowed(n)))
-ltl liveness { liv(0) && liv(1) && liv(2) && liv(3) && liv(4) && liv(5) };
+#define life(n) ([] ((sense(n) && !allowed(n)) -> <> allowed(n)))
+ltl liveness { life(0) && life(1) && life(2) && life(3) && life(4) && life(5) };
