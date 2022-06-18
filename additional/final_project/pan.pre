@@ -1,0 +1,160 @@
+# 1 "assignment.pml"
+# 1 "<built-in>" 1
+# 1 "<built-in>" 3
+# 362 "<built-in>" 3
+# 1 "<command line>" 1
+# 1 "<built-in>" 2
+# 1 "assignment.pml" 2
+# 12 "assignment.pml"
+int state = 0;
+
+int conditions[13] =
+{
+    4096,
+    7440,
+    6320,
+    4096,
+    2182,
+    1412,
+    0,
+    5172,
+    3106,
+    0,
+    418,
+    4374,
+    2191
+}
+
+
+
+
+int lanes_nums[6] = { 1, 5, 7, 10, 11, 12 }
+
+mtype:light = { RED, GREEN }
+mtype:light lights_color[13] =
+{
+    RED, RED, RED, RED, RED, RED, RED,
+    RED, RED, RED, RED, RED, RED
+}
+
+mtype:actor = { CAR, PED }
+
+
+
+chan lanes[13] = [1] of { mtype:actor }
+
+
+chan control_send[13] = [0] of { int }
+chan control_return[13] = [0] of { int }
+
+proctype car_spawner (int lane) {
+    assert(lane <= 11);
+    do
+    :: lanes[lane]!CAR;
+    od;
+}
+
+proctype pedestrian_spawner (int lane) {
+    assert(lane > 11 && lane <= 13);
+    do
+    :: lanes[lane]!PED;
+    od;
+}
+
+proctype traffic_light (int lane) {
+    int control_token;
+    mtype:actor traffic_actor;
+    do
+
+    :: lanes[lane]?[traffic_actor];
+        do
+        :: control_send[lane]?control_token;
+            assert(control_token == lane);
+
+            if
+            :: ((state & conditions[lane]) == 0) ->
+
+                state = state ^ 1 << lane;
+                lights_color[lane] = GREEN;
+                printf("Lane %d is good to go\n", lane);
+            :: else -> skip;
+            fi;
+            control_return[lane]!lane;
+            if
+            :: lights_color[lane] == GREEN -> break;
+            :: else ->
+                printf("Lane %d: could not turn GREEN\n", lane);
+                skip;
+            fi;
+        od;
+
+
+        lanes[lane]?traffic_actor;
+        printf("Lane %d: passes a car/ped\n", lane);
+# 114 "assignment.pml"
+        control_send[lane]?control_token;
+        assert(control_token == lane);
+        lights_color[lane] = RED;
+
+        state = state ^ 1 << lane;
+        printf("Lane %d: stopped\n", lane);
+        control_return[lane]!lane;
+    od;
+}
+
+proctype intersection_controller () {
+    int next_lane_idx = 0;
+    int next_lane = 0;
+    int control_token = 0;
+
+    do
+    :: next_lane = lanes_nums[next_lane_idx];
+        control_send[next_lane]!next_lane;
+        control_return[next_lane]?control_token;
+        assert(control_token == next_lane)
+        next_lane_idx = (next_lane_idx + 1) % 6;
+    od;
+}
+
+init {
+    run intersection_controller();
+    printf("Controller spawned\n");
+
+    int new_lane_idx = 0;
+    int new_lane = 0;
+    do
+    :: new_lane_idx < 6 ->
+        new_lane = lanes_nums[new_lane_idx];
+        if
+        :: new_lane <= 11 ->
+            run car_spawner(new_lane);
+
+        :: else ->
+            run pedestrian_spawner(new_lane);
+
+        fi;
+        run traffic_light(lanes_nums[new_lane_idx]);
+
+        new_lane_idx++;
+    :: else ->
+        break;
+    od;
+    printf("All processes started\n");
+}
+
+
+mtype:actor dummy_actor;
+
+
+
+
+
+ltl fairness { ([]<> !((lanes[1]?[dummy_actor]) && (lights_color[1] == GREEN))) && ([]<> !((lanes[5]?[dummy_actor]) && (lights_color[5] == GREEN))) && ([]<> !((lanes[7]?[dummy_actor]) && (lights_color[7] == GREEN))) && ([]<> !((lanes[10]?[dummy_actor]) && (lights_color[10] == GREEN))) && ([]<> !((lanes[11]?[dummy_actor]) && (lights_color[11] == GREEN))) && ([]<> !((lanes[12]?[dummy_actor]) && (lights_color[12] == GREEN))) };
+
+ltl safety {[]!((lights_color[1] == GREEN) && ((lights_color[10] == GREEN) || (lights_color[11] == GREEN)) ||
+                (lights_color[5] == GREEN) && ((lights_color[7] == GREEN) || (lights_color[10] == GREEN)) ||
+                (lights_color[7] == GREEN) && (lights_color[10] == GREEN) ||
+                (lights_color[12] == GREEN) && ((lights_color[1] == GREEN) || (lights_color[7] == GREEN) || (lights_color[11] == GREEN))) };
+
+
+ltl liveness { ([] (((lanes[1]?[dummy_actor]) && !(lights_color[1] == GREEN)) -> <> (lights_color[1] == GREEN))) && ([] (((lanes[5]?[dummy_actor]) && !(lights_color[5] == GREEN)) -> <> (lights_color[5] == GREEN))) && ([] (((lanes[7]?[dummy_actor]) && !(lights_color[7] == GREEN)) -> <> (lights_color[7] == GREEN))) && ([] (((lanes[10]?[dummy_actor]) && !(lights_color[10] == GREEN)) -> <> (lights_color[10] == GREEN))) && ([] (((lanes[11]?[dummy_actor]) && !(lights_color[11] == GREEN)) -> <> (lights_color[11] == GREEN))) && ([] (((lanes[12]?[dummy_actor]) && !(lights_color[12] == GREEN)) -> <> (lights_color[12] == GREEN))) };
